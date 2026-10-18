@@ -1,0 +1,618 @@
+
+local name, sm = ...
+sm.core = {}
+
+local mod = sm.core
+local L = sm.L
+
+sm.backdrop = {
+	bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+	edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+	insets = {left = 4, top = 4, right = 4, bottom = 4}, -- Change the Clock/Coords/ZoneText clamp if this is changed
+	edgeSize = 16,
+	tile = true,
+}
+
+mod.frame = CreateFrame("Frame")
+mod.button = CreateFrame("Button")
+mod.font = mod.button:CreateFontString()
+mod.frame:Hide()
+mod.button:Hide()
+mod.deepCopyHash = function(t)
+	local nt = {}
+	for k, v in pairs(t) do
+		if type(v) == "table" then
+			nt[k] = mod.deepCopyHash(v)
+		else
+			nt[k] = v
+		end
+	end
+	return nt
+end
+mod.frame:SetScript("OnEvent", function(_, event, ...)
+	mod[event](sm, ...)
+end)
+
+mod.options = {
+	type = "group",
+	name = name,
+	args = {
+		lock = {
+			order = 1,
+			name = L["Lock Minimap"],
+			type = "toggle",
+			get = function()
+				return mod.db.lock
+			end,
+			set = function(info, v)
+				mod.db.lock = v
+				Minimap:SetMovable(not mod.db.lock)
+			end,
+		},
+		clamp = {
+			order = 2,
+			type = "toggle",
+			name = L["Clamp to screen"],
+			desc = L["Prevent the minimap from being moved off the screen"],
+			get = function()
+				return mod.db.clamp
+			end,
+			set = function(info, v)
+				mod.db.clamp = v
+				Minimap:SetClampedToScreen(v)
+			end,
+		},
+		rotate = {
+			order = 3,
+			type = "toggle",
+			name = ROTATE_MINIMAP,
+			desc = OPTION_TOOLTIP_ROTATE_MINIMAP,
+			get = function()
+				return mod.db.rotate
+			end,
+			set = function(_, value)
+				if value then
+					mod.db.rotate = true
+					C_CVar.SetCVar("rotateMinimap", 1)
+				else
+					mod.db.rotate = nil
+					C_CVar.SetCVar("rotateMinimap", 0)
+				end
+			end,
+		},
+		rightClickToConfig = {
+			order = 4,
+			type = "toggle",
+			name = L["Right Click Configure"],
+			desc = L["Right clicking the map will open the EverMap options"],
+			get = function()
+				return mod.db.rightClickToConfig
+			end,
+			set = function(info, v)
+				mod.db.rightClickToConfig = v
+			end,
+		},
+		scale = {
+			order = 5,
+			type = "range",
+			name = L["Scale"],
+			min = 0.2,
+			max = 3.0,
+			step = 0.01,
+			bigStep = 0.01,
+			width = 2,
+			get = function(info)
+				return mod.db.scale or (MinimapNorthTag and 1 or 1.1)
+			end,
+			set = function(info, v)
+				mod.db.scale = v
+				mod.frame.SetScale(Minimap, v)
+			end,
+		},
+		northTag = {
+			order = 6,
+			type = "toggle",
+			name = L["Show North Tag"],
+			get = function()
+				return mod.db.northTag
+			end,
+			set = function(info, v)
+				if not MinimapNorthTag then return end
+				if v then
+					MinimapNorthTag.Show = MinimapNorthTag.oldShow
+					MinimapNorthTag.oldShow = nil
+					MinimapCompassTexture.Show = MinimapCompassTexture.oldShow
+					MinimapCompassTexture.oldShow = nil
+					if C_CVar.GetCVarBool("rotateMinimap") then
+						MinimapCompassTexture:Show()
+					else
+						MinimapNorthTag:Show()
+					end
+				else
+					MinimapNorthTag:Hide()
+					MinimapNorthTag.oldShow = MinimapNorthTag.Show
+					MinimapNorthTag.Show = MinimapNorthTag.Hide
+					MinimapCompassTexture:Hide()
+					MinimapCompassTexture.oldShow = MinimapCompassTexture.Show
+					MinimapCompassTexture.Show = MinimapCompassTexture.Hide
+				end
+				mod.db.northTag = v
+			end,
+			hidden = not MinimapNorthTag,
+		},
+		zoom = {
+			order = 7,
+			type = "range",
+			name = L["Auto Zoom-Out Delay"],
+			desc = L["If you zoom into the map, this feature will automatically zoom out after the selected period of time (seconds). Using a value of 0 will disable Auto Zoom-Out."],
+			width = 2,
+			min = 0,
+			max = 30,
+			step = 1,
+			bigStep = 1,
+			get = function()
+				return mod.db.autoZoom
+			end,
+			set = function(info, v)
+				mod.db.autoZoom = v
+			end,
+		},
+		spacer1 = {
+			order = 8,
+			type = "description",
+			width = "full",
+			name = "\n\n",
+		},
+		presetHeader = {
+			order = 9,
+			type = "header",
+			name = L["Preset"],
+		},
+		spacer2 = {
+			order = 10,
+			type = "description",
+			width = "full",
+			name = L["Quickly change the look of your minimap by using a minimap preset."].."\n",
+		},
+		spacer3 = {
+			order = 12,
+			type = "description",
+			width = 0.5,
+			name = "",
+		},
+		spacer4 = {
+			order = 14,
+			type = "description",
+			width = "full",
+			name = "\n",
+		},
+		profilesHeader = {
+			order = 15,
+			type = "header",
+			name = L["Profiles"],
+		},
+		spacer5 = {
+			order = 16,
+			type = "description",
+			width = "full",
+			name = L["Use the global profile if you want the same look on every character, or use a character-specific profile for a unique look on each character."].."\n",
+		},
+		globalProf = {
+			order = 17,
+			type = "toggle",
+			name = L["Use Global Profile"],
+			width = "full",
+			confirm = function(info, v)
+				if v and EverMap_ForeverDB.global then
+					return L["A global profile already exists. You will be switched over to it and your UI will be reloaded, are you sure?"]
+				elseif v and not EverMap_ForeverDB.global then
+					return L["No global profile exists. Your current profile will be copied over and used as the global profile, are you sure? This will also reload your UI."]
+				elseif not v then
+					return L["Are you sure you want to switch back to using a character specific profile? This will reload your UI."]
+				end
+			end,
+			get = function()
+				local char = (UnitName("player").."-"..GetRealmName())
+				return type(EverMap_ForeverDB[char]) == "string"
+			end,
+			set = function(info, v)
+				local char = (UnitName("player").."-"..GetRealmName())
+				if v then
+					if not EverMap_ForeverDB.global then
+						EverMap_ForeverDB.global = mod.deepCopyHash(EverMap_ForeverDB[char])
+					end
+					EverMap_ForeverDB[char] = "global"
+					ReloadUI()
+				else
+					EverMap_ForeverDB[char] = nil
+					ReloadUI()
+				end
+			end,
+		},
+		copy = {
+			type = "select",
+			name = L["Copy a Profile"],
+			order = 18,
+			confirm = true,
+			confirmText = L["Copying this profile will reload your UI, are you sure?"],
+			values = function()
+				local tbl = {}
+				for k,v in pairs(EverMap_ForeverDB) do
+					if k ~= "presets" and k ~= "global" and k ~= (UnitName("player").."-"..GetRealmName()) and type(v) == "table" then
+						tbl[k]=k
+					end
+				end
+				return tbl
+			end,
+			set = function(info, v)
+				local char = (UnitName("player").."-"..GetRealmName())
+				EverMap_ForeverDB[char] = mod.deepCopyHash(EverMap_ForeverDB[v])
+				ReloadUI()
+			end,
+			disabled = function()
+				local char = (UnitName("player").."-"..GetRealmName())
+				if type(EverMap_ForeverDB[char]) == "string" then
+					return true
+				end
+				for k,v in pairs(EverMap_ForeverDB) do
+					if k ~= "presets" and k ~= "global" and k ~= char and type(v) == "table" then
+						return false
+					end
+				end
+				return true
+			end,
+		},
+		delete = {
+			type = "select",
+			name = L["Delete a Profile"],
+			order = 19,
+			confirm = true,
+			confirmText = L["Really delete this profile?"],
+			values = function()
+				local tbl = {}
+				for k,v in pairs(EverMap_ForeverDB) do
+					if k ~= "presets" and k ~= "global" and k ~= (UnitName("player").."-"..GetRealmName()) and type(v) == "table" then
+						tbl[k]=k
+					end
+				end
+				return tbl
+			end,
+			set = function(info, v)
+				EverMap_ForeverDB[v] = nil
+			end,
+			disabled = function()
+				local char = (UnitName("player").."-"..GetRealmName())
+				if type(EverMap_ForeverDB[char]) == "string" then
+					return true
+				end
+				for k,v in pairs(EverMap_ForeverDB) do
+					if k ~= "presets" and k ~= "global" and k ~= char and type(v) == "table" then
+						return false
+					end
+				end
+				return true
+			end,
+		},
+		reset = {
+			type = "execute",
+			name = L["Reset Current Profile"],
+			confirm = true,
+			confirmText = L["Resetting this profile will reload your UI, are you sure?"],
+			order = 20,
+			func = function()
+				local char = UnitName("player").."-"..GetRealmName()
+				EverMap_ForeverDB[char] = nil
+				ReloadUI()
+			end,
+			disabled = function()
+				local char = (UnitName("player").."-"..GetRealmName())
+				if type(EverMap_ForeverDB[char]) == "string" then
+					return true
+				end
+			end,
+		},
+	}
+}
+
+function mod:ADDON_LOADED(addon)
+	if addon == "EverMapForever" then
+		mod.frame:UnregisterEvent("ADDON_LOADED")
+
+		if type(EverMap_ForeverDB) ~= "table" then
+			EverMap_ForeverDB = {}
+		end
+
+		local char = UnitName("player").."-"..GetRealmName()
+		if not EverMap_ForeverDB[char] then
+			EverMap_ForeverDB[char] = {}
+		end
+
+		local dbToDispatch
+		if type(EverMap_ForeverDB[char]) == "string" then
+			if not EverMap_ForeverDB.global then
+				EverMap_ForeverDB.global = {}
+			end
+			dbToDispatch = EverMap_ForeverDB.global
+		else
+			dbToDispatch = EverMap_ForeverDB[char]
+		end
+
+		if not dbToDispatch.core then
+			dbToDispatch.core = {
+				lock = false,
+				clamp = true,
+				rightClickToConfig = true,
+				autoZoom = 5,
+				northTag = true,
+				shape = "Interface\\AddOns\\EverMapForever\\shapes\\circle.tga",
+			}
+		end
+		mod.db = dbToDispatch.core
+
+		mod.loadModules = {}
+		for k,v in pairs(sm) do
+			if v.OnInitialize then
+				v:OnInitialize(dbToDispatch)
+				v.OnInitialize = nil
+				tinsert(mod.loadModules, k)
+			end
+		end
+
+		mod.ADDON_LOADED = nil
+	end
+end
+mod.frame:RegisterEvent("ADDON_LOADED")
+
+-- 12.0.1 minimap clicks workaround
+local hijackClicksFrame = CreateFrame("Frame")
+hijackClicksFrame:SetParent(Minimap)
+hijackClicksFrame:SetPoint("CENTER", Minimap, "CENTER")
+hijackClicksFrame:Show()
+hijackClicksFrame:EnableMouse(true)
+hijackClicksFrame:SetPassThroughButtons("LeftButton")
+hijackClicksFrame:SetPropagateMouseMotion(true)
+function mod:PLAYER_LOGIN()
+	mod.frame:UnregisterEvent("PLAYER_LOGIN")
+
+	-- Setup config
+	LibStub("AceConfigRegistry-3.0"):RegisterOptionsTable(name, mod.options, true)
+	local _, categoryID = LibStub("AceConfigDialog-3.0"):AddToBlizOptions(name)
+
+	-- Configure slash handler
+	SlashCmdList.EverMap = function()
+		Settings.OpenToCategory(categoryID)
+	end
+	SLASH_EverMap1 = "/minimap"
+	SLASH_EverMap2 = "/evermap"
+
+	hijackClicksFrame:SetSize(140, 140)
+	hijackClicksFrame:SetScript("OnMouseUp", function(_, button)
+		if button == "RightButton" and mod.db.rightClickToConfig then
+			SlashCmdList.EverMap()
+		end
+	end)
+
+	mod:SetupMap()
+
+	-- Load the modules in alphabetical order
+	table.sort(mod.loadModules)
+	for i=1, #mod.loadModules do
+		sm[mod.loadModules[i]]:OnEnable()
+		sm[mod.loadModules[i]].OnEnable = nil
+	end
+
+	mod.PLAYER_LOGIN = nil
+end
+mod.frame:RegisterEvent("PLAYER_LOGIN")
+
+-- Hopefully temporary workaround for string size functions returning 0 for foreign fonts at PLAYER_LOGIN on a cold boot
+function mod:LOADING_SCREEN_DISABLED()
+	mod.frame:UnregisterEvent("LOADING_SCREEN_DISABLED")
+
+	if not mod.PLAYER_LOGIN then -- Only if PLAYER_LOGIN has fired before LOADING_SCREEN_DISABLED
+		for i=1, #mod.loadModules do
+			local module = sm[mod.loadModules[i]]
+			if module and module.OnLoadingScreenOver then
+				sm[mod.loadModules[i]]:OnLoadingScreenOver()
+				sm[mod.loadModules[i]].OnLoadingScreenOver = nil
+			end
+		end
+		mod.loadModules = nil
+	end
+
+	mod.LOADING_SCREEN_DISABLED = nil
+end
+mod.frame:RegisterEvent("LOADING_SCREEN_DISABLED")
+
+if mod.frame.GetFrameStrata(Minimap) ~= "LOW" then
+	mod.frame.SetFrameStrata(Minimap, "LOW") -- Blizz Defaults patch 9.0.1 Minimap.xml
+end
+if mod.frame.GetFrameLevel(Minimap) ~= 2 then
+	mod.frame.SetFrameLevel(Minimap, 2) -- Blizz Defaults patch 9.0.1 Minimap.xml
+end
+
+-- Prevent the damage caused by automagic fuckery when a frame changes parent by locking the strata/level in place
+mod.frame.SetFixedFrameStrata(Minimap, true)
+mod.frame.SetFixedFrameLevel(Minimap, true)
+mod.frame.SetParent(Minimap, UIParent)
+-- Prevent some addons doing dumb things that breaks EverMap. #175
+hooksecurefunc(Minimap, "SetParent", function()
+	mod.frame.SetParent(Minimap, UIParent)
+end)
+
+-- Make sure the various minimap buttons follow the minimap
+-- We do this before login to prevent button placement issues
+MinimapBackdrop:ClearAllPoints()
+MinimapBackdrop:SetPoint("CENTER", Minimap, "CENTER", -8, -23)
+
+-- To turn off Blizz auto hiding the zoom buttons, we pretend the mouse is always over it.
+-- The alternative is killing the Minimap OnEnter/OnLeave script which could screw over other addons.
+-- See MinimapMixin:OnLeave() on line 185 of FrameXML/Minimap.lua
+local fakeMouseOver = function() return true end
+Minimap.ZoomIn.IsMouseOver = fakeMouseOver
+Minimap.ZoomIn:Show()
+Minimap.ZoomOut.IsMouseOver = fakeMouseOver
+Minimap.ZoomOut:Show()
+
+function mod:SetupMap()
+	local Minimap = Minimap
+
+	-- Hide the Minimap during a pet battle
+	mod.frame:RegisterEvent("PET_BATTLE_OPENING_START")
+	mod.PET_BATTLE_OPENING_START = function()
+		Minimap:Hide()
+	end
+	mod.frame:RegisterEvent("PET_BATTLE_CLOSE")
+	mod.PET_BATTLE_CLOSE = function()
+		Minimap:Show()
+	end
+
+	-- Hide the Minimap during combat. Remove the comments (--) to enable.
+	--mod.frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+	--mod.PLAYER_REGEN_DISABLED = function()
+	--	Minimap:Hide()
+	--end
+	--mod.frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+	--mod.PLAYER_REGEN_ENABLED = function()
+	--	Minimap:Show()
+	--end
+
+	-- This is our method of cancelling timers, we only let the very last scheduled timer actually run the code.
+	-- We do this by using a simple counter, which saves us using the more expensive C_Timer.NewTimer API.
+	local started, current = 0, 0
+	--[[ Auto Zoom Out ]]--
+	local zoomOut = function()
+		current = current + 1
+		if started == current then
+			for i = 1, Minimap:GetZoom() or 0 do
+				if Minimap_ZoomOutClick then
+					Minimap_ZoomOutClick() -- Call it directly so we don't run our own hook
+				else
+					Minimap.ZoomOut:OnClick()
+				end
+			end
+			started, current = 0, 0
+		end
+	end
+
+	local zoomBtnFunc = function()
+		if mod.db.autoZoom > 0 then
+			started = started + 1
+			C_Timer.After(mod.db.autoZoom, zoomOut)
+		end
+	end
+	zoomBtnFunc()
+	if MinimapZoomIn then
+		MinimapZoomIn:HookScript("OnClick", zoomBtnFunc)
+		MinimapZoomOut:HookScript("OnClick", zoomBtnFunc)
+	else
+		Minimap.ZoomIn:HookScript("OnClick", zoomBtnFunc)
+		Minimap.ZoomOut:HookScript("OnClick", zoomBtnFunc)
+	end
+
+	--[[ MouseWheel Zoom ]]--
+	Minimap:EnableMouseWheel(true)
+	Minimap:SetScript("OnMouseWheel", function(frame, d)
+		if d > 0 then
+			(MinimapZoomIn or Minimap.ZoomIn):Click()
+		elseif d < 0 then
+			(MinimapZoomOut or Minimap.ZoomOut):Click()
+		end
+	end)
+
+	MinimapCluster:EnableMouse(false) -- Don't leave an invisible dead zone
+
+	-- Removes the circular "waffle-like" texture that shows when using a non-circular minimap in the blue quest objective area.
+	if Minimap.SetArchBlobRingScalar then Minimap:SetArchBlobRingScalar(0) end
+	if Minimap.SetArchBlobRingAlpha then Minimap:SetArchBlobRingAlpha(0) end
+	if Minimap.SetQuestBlobRingScalar then Minimap:SetQuestBlobRingScalar(0) end
+	if Minimap.SetQuestBlobRingAlpha then Minimap:SetQuestBlobRingAlpha(0) end
+
+	if MinimapNorthTag and not mod.db.northTag then
+		MinimapNorthTag:Hide()
+		MinimapNorthTag.oldShow = MinimapNorthTag.Show
+		MinimapNorthTag.Show = MinimapNorthTag.Hide
+		MinimapCompassTexture:Hide()
+		MinimapCompassTexture.oldShow = MinimapCompassTexture.Show
+		MinimapCompassTexture.Show = MinimapCompassTexture.Hide
+	end
+
+	if MinimapBorderTop then
+		MinimapBorderTop:Hide()
+	end
+	Minimap:RegisterForDrag("LeftButton")
+	Minimap:SetClampedToScreen(mod.db.clamp)
+	Minimap:SetSize(140, 140)
+	Minimap:SetMovable(not mod.db.lock)
+
+	if mod.db.rotate then
+		C_CVar.SetCVar("rotateMinimap", 1)
+	end
+	if MinimapCluster.SetRotateMinimap then
+		hooksecurefunc(MinimapCluster, "SetRotateMinimap", function()
+			if mod.db.rotate then
+				C_CVar.SetCVar("rotateMinimap", 1)
+			end
+		end)
+	end
+
+	Minimap:SetScript("OnDragStart", function(f) if f:IsMovable() then f:StartMoving() end end)
+	Minimap:SetScript("OnDragStop", function(f)
+		f:StopMovingOrSizing()
+		local p, _, rp, x, y = Minimap:GetPoint()
+		mod.db.point, mod.db.relpoint, mod.db.x, mod.db.y = p, rp, x, y
+	end)
+
+	-- Set Scale
+	mod.frame.SetScale(Minimap, mod.db.scale or (MinimapNorthTag and 1 or 1.1))
+	hooksecurefunc(Minimap, "SetScale", function() -- Other non-minimap addons like to mess with this, if EverMap is installed then clearly that's what the user wants to use
+		mod.frame.SetPoint(Minimap, mod.db.scale or (MinimapNorthTag and 1 or 1.1))
+	end)
+
+	-- Set UI points
+	if mod.db.point then
+		mod.frame.ClearAllPoints(Minimap)
+		mod.frame.SetPoint(Minimap, mod.db.point, UIParent, mod.db.relpoint, mod.db.x, mod.db.y)
+		hooksecurefunc(Minimap, "SetPoint", function() -- Edit mode for the minimap has a "header underneath" option which changes Minimap points
+			mod.frame.ClearAllPoints(Minimap)
+			mod.frame.SetPoint(Minimap, mod.db.point, UIParent, mod.db.relpoint, mod.db.x, mod.db.y)
+		end)
+	end
+	self.SetupMap = nil
+end
+
+function mod:RegisterModuleOptions(modName, optionTbl, displayName)
+	LibStub("AceConfigRegistry-3.0"):RegisterOptionsTable(name..modName, optionTbl, true)
+	LibStub("AceConfigDialog-3.0"):AddToBlizOptions(name..modName, displayName, name)
+end
+
+--------------------------------------------------------------------------------
+-- Public API
+--
+
+-- This is purely to allow other addons to move and easily restore the EverMap position (e.g. HUD minimap addons need to move and enlarge the minimap)
+local public = {}
+
+-- EverMap:SetPoint(...)
+function public:SetPoint(point, anchor, relPoint, x, y)
+	mod.frame.ClearAllPoints(Minimap)
+	mod.frame.SetPoint(Minimap, point, anchor, relPoint, x, y)
+end
+
+-- EverMap:EnterHUD() -- Call this when you want to enter HUD mode
+function public:EnterHUD()
+	hijackClicksFrame:Hide()
+end
+
+-- EverMap:ExitHUD() -- Call this when you want to exit HUD mode
+function public:ExitHUD()
+	mod.frame.ClearAllPoints(Minimap)
+	mod.frame.SetPoint(Minimap, mod.db.point, UIParent, mod.db.relpoint, mod.db.x, mod.db.y)
+	mod.frame.SetScale(Minimap, mod.db.scale or (MinimapNorthTag and 1 or 1.1))
+	Minimap:SetClampedToScreen(mod.db.clamp)
+	Minimap:SetSize(140, 140)
+	Minimap:SetMovable(not mod.db.lock)
+	hijackClicksFrame:Show()
+end
+
+EverMap = setmetatable({}, { __index = public, __newindex = function() end, __metatable = false })

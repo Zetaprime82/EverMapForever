@@ -1,0 +1,26 @@
+## Interface: 16001
+## Version: v1.60.1
+## Title: EverMap Forever
+## Category: User Interface
+## IconTexture: Interface\AddOns\EverMapForever\media\globe
+## Notes: Style up your minimap with some options.
+## Notes-deDE: Customize your minimap: shapes, borders, buttons, zone text, clock and coordinates. Made for WoW Forever.
+## Author: Zetaprime
+## SavedVariables: EverMap_ForeverDB
+## OptionalDeps: Ace3, AceGUI-3.0-SharedMediaWidgets, LibSharedMedia-3.0, Blizzard_TimeManager
+## X-Embeds: Ace3, AceGUI-3.0-SharedMediaWidgets, LibSharedMedia-3.0, CallbackHandler-1.0, LibStub
+
+
+embeds.xml
+
+localization\enUS.lua
+EverMap.lua
+Shapes.lua
+Buttons.lua
+BorderPresets.lua
+Borders.lua
+Clock.lua
+Coordinates.lua
+HudMap.lua
+Movers.lua
+ZoneText.lua
