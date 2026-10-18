@@ -1,6 +1,6 @@
 # EverMap Forever
 
-EverMap Forever lets you restyle and reorganize your minimap, and it’s built for WoW Forever. You can change how the map looks, move its parts around, and hide what you don’t need.
+*EverMap Forever lets you restyle and reorganize your minimap, and it’s built for WoW Forever. You can change how the map looks, move its parts around, and hide what you don’t need.*
 
 Features :
 --------------------
