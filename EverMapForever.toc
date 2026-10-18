@@ -3,7 +3,7 @@
 ## Title: EverMap Forever
 ## Category: User Interface
 ## IconTexture: Interface\AddOns\EverMapForever\media\globe
-## Notes: Style up your minimap with some options.
+## Notes: Customize your minimap: shapes, borders, buttons, zone text, clock and coordinates.
 ## Notes-deDE: Customize your minimap: shapes, borders, buttons, zone text, clock and coordinates. Made for WoW Forever.
 ## Author: Zetaprime82
 ## SavedVariables: EverMap_ForeverDB
