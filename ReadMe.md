@@ -15,8 +15,8 @@ Features :
 
 Usage :
 -----------------------
-Right-click the minimap, or type /evermap or /minimap, to open the options.
+Right-click the minimap, or type 	<sub>/evermap</sub> or /minimap</sub>, to open the options.
 
 Installation :
 ------------------------------
-Put the EverMapForever folder in Interface\AddOns and restart the game.
+Put the 	<sub>EverMapForever</sub> folder in 	<sub>Interface\AddOns</sub> and restart the game.
